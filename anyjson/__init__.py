@@ -2,7 +2,6 @@
 interface"""
 
 import sys
-from io import StringIO
 
 VERSION = (0, 4, 0)
 __version__ = ".".join(map(str, VERSION[0:3])) + "".join(VERSION[3:])
@@ -17,6 +16,16 @@ __docformat__ = "restructuredtext"
 #: except to get the name of the implementation in use. The name is
 #: available through ``implementation.name``.
 implementation = None
+
+# json.loads does not support buffer() objects,
+# so we load() and StringIO instead, and it won't copy.
+if sys.version_info[0] == 3:
+    from io import StringIO
+else:
+    try:
+        from io import StringIO  # noqa
+    except ImportError:
+        from io import StringIO   # noqa
 
 #: List of known json modules, and the names of their loads/dumps
 #: methods, as well as the exceptions they throw.  Exception can be either
@@ -38,7 +47,7 @@ class _JsonImplementation(object):
     """Incapsulates a JSON implementation"""
 
     def __init__(self, modspec):
-        modinfo = dict(zip(_fields, modspec))
+        modinfo = dict(list(zip(_fields, modspec)))
 
         if modinfo["modname"] == "cjson":
             import warnings
@@ -55,9 +64,9 @@ class _JsonImplementation(object):
         self._encode_error = modinfo["encerror"]
         self._decode_error = modinfo["decerror"]
 
-        if isinstance(modinfo["encerror"], basestring):
+        if isinstance(modinfo["encerror"], str):
             self._encode_error = getattr(module, modinfo["encerror"])
-        if isinstance(modinfo["decerror"], basestring):
+        if isinstance(modinfo["decerror"], str):
             self._decode_error = getattr(module, modinfo["decerror"])
 
         self.name = modinfo["modname"]
@@ -76,8 +85,8 @@ class _JsonImplementation(object):
         TypeError if the object could not be serialized."""
         try:
             return self._encode(data)
-        except self._encode_error, exc:
-            raise TypeError, TypeError(*exc.args), sys.exc_info()[2]
+        except self._encode_error as exc:
+            raise TypeError(TypeError(*exc.args)).with_traceback(sys.exc_info()[2])
     serialize = dumps
 
     def loads(self, s):
@@ -85,11 +94,11 @@ class _JsonImplementation(object):
         ValueError if the string could not be parsed."""
         # uses StringIO to support buffer objects.
         try:
-            if self._filedecode and not isinstance(s, basestring):
+            if self._filedecode and not isinstance(s, str):
                 return self._filedecode(StringIO(s))
             return self._decode(s)
-        except self._decode_error, exc:
-            raise ValueError, ValueError(*exc.args), sys.exc_info()[2]
+        except self._decode_error as exc:
+            raise ValueError(ValueError(*exc.args)).with_traceback(sys.exc_info()[2])
     deserialize = loads
 
 
@@ -108,7 +117,7 @@ if __name__ == "__main__":
     # We do NOT try to load a compatible module because that may throw an
     # exception, which renders the package uninstallable with easy_install
     # (It trys to execfile the script when installing, to make sure it works)
-    print "Running anyjson as a stand alone script is not supported"
+    print("Running anyjson as a stand alone script is not supported")
     sys.exit(1)
 else:
     for modspec in _modules:
